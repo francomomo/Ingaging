@@ -2,7 +2,8 @@ import express, { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 
 import { RequestValidationError } from '../errors/requestValidationError';
-import { DatabaseConnectionError } from '../errors/databaseConnectionError';
+import { BadRequestError } from '../errors/badRequestError';
+import { User } from '../models/user';
 
 const router = express.Router();
 
@@ -15,17 +16,22 @@ router.post(
       .isLength({ min: 8 })
       .withMessage('Password must be at least 8 characters'),
   ],
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       throw new RequestValidationError(errors.array());
     }
 
     const { email, password } = req.body;
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      throw new BadRequestError('Email in use');
+    }
 
-    throw new DatabaseConnectionError();
+    const user = User.build({ email, password });
+    await user.save();
 
-    res.send('User created');
+    res.status(201).send(user);
   }
 );
 
