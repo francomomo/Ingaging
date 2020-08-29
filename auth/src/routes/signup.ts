@@ -1,7 +1,8 @@
 import express, { Request, Response } from 'express';
-import { body, validationResult } from 'express-validator';
+import { body } from 'express-validator';
+import jwt from 'jsonwebtoken';
 
-import { RequestValidationError } from '../errors/requestValidationError';
+import { validateRequest } from '../middlewares/validateRequest';
 import { BadRequestError } from '../errors/badRequestError';
 import { User } from '../models/user';
 
@@ -16,12 +17,8 @@ router.post(
       .isLength({ min: 8 })
       .withMessage('Password must be at least 8 characters'),
   ],
+  validateRequest,
   async (req: Request, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      throw new RequestValidationError(errors.array());
-    }
-
     const { email, password } = req.body;
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -30,6 +27,20 @@ router.post(
 
     const user = User.build({ email, password });
     await user.save();
+
+    // Generate JWT
+    const userJWT = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+      },
+      process.env.JWT_KEY!
+    );
+
+    // Store JWT on cookie session
+    req.session = {
+      jwt: userJWT,
+    };
 
     res.status(201).send(user);
   }
